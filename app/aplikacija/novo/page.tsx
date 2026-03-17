@@ -10,6 +10,7 @@ export default function NovoOpravilo() {
     opis: "",
     odKdaj: "",
     doKdaj: "",
+    ponavljanje: "samo_enkrat",
   });
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -108,6 +109,28 @@ export default function NovoOpravilo() {
                   className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                 />
               </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted)]">
+                Ponavljanje
+              </label>
+              <select
+                value={formData.ponavljanje}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    ponavljanje: e.target.value,
+                  }))
+                }
+                className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+              >
+                <option value="samo_enkrat">Samo enkrat</option>
+                <option value="vsak_dan">Vsak dan</option>
+                <option value="vsak_teden">Vsak teden</option>
+                <option value="vsak_mesec">Vsak mesec</option>
+                <option value="vsako_leto">Vsako leto</option>
+              </select>
             </div>
 
             <div className="mt-8 flex gap-3">
