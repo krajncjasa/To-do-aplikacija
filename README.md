@@ -11,6 +11,7 @@ Za delovanje registracijskega backenda potrebujes:
 NEXT_PUBLIC_SUPABASE_URL="..."
 NEXT_PUBLIC_SUPABASE_ANON_KEY="..."
 SUPABASE_SERVICE_ROLE_KEY="..."
+AUTH_SESSION_SECRET="..."
 ```
 
 3. V Supabase SQL Editorju zazeni skripto iz `supabase/schema.sql`.
@@ -39,6 +40,41 @@ Primer request body:
 ```
 
 Ob uspesni registraciji endpoint vrne uporabnika brez polja `geslo`.
+
+## Prijava in preusmeritev
+
+Prijavni endpoint:
+
+- `POST /api/auth/login`
+
+Po uspesni prijavi backend nastavi `httpOnly` cookie `todo_session` in frontend
+preusmeri na:
+
+- `/aplikacija` (glavna stran aplikacije)
+
+Odjava:
+
+- `POST /api/auth/logout`
+
+## Upravljanje profila
+
+Korisnik može spremeniti svoje podatke (ime, priimek, e-pošta) na `/aplikacija/profil`.
+
+Endpoint za posodobljenje profila:
+
+- `POST /api/profile`
+
+Primer request body:
+
+```json
+{
+  "ime": "Janez",
+  "priimek": "Novak",
+  "eposta": "janez@primer.si"
+}
+```
+
+Ob uspeni posodobi se sejo avtomatski osvežno s novimi podatki.
 
 ## Getting Started
 

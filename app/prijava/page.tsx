@@ -2,10 +2,66 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { type FormEvent, useState } from "react";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Prijava() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+
+    const email = formData.email.trim().toLowerCase();
+
+    if (!EMAIL_REGEX.test(email)) {
+      setError("Vnesi veljaven e-postni naslov.");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setError("Geslo mora imeti vsaj 8 znakov.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password: formData.password,
+        }),
+      });
+
+      const payload: { error?: string; redirectTo?: string } = await response.json();
+
+      if (!response.ok) {
+        setError(payload.error ?? "Prijava ni uspela.");
+        return;
+      }
+
+      router.push(payload.redirectTo ?? "/aplikacija");
+      router.refresh();
+    } catch {
+      setError("Napaka povezave s streznikom. Poskusi znova.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
@@ -72,7 +128,17 @@ export default function Prijava() {
               </Link>
             </p>
 
-            <form className="mt-7 space-y-4">
+            <form className="mt-7 space-y-4" onSubmit={handleSubmit} noValidate>
+              {error && (
+                <div
+                  className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                  aria-live="polite"
+                >
+                  <p className="font-semibold">Pozor</p>
+                  <p>{error}</p>
+                </div>
+              )}
+
               {/* E-pošta */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted)]">
@@ -80,7 +146,13 @@ export default function Prijava() {
                 </label>
                 <input
                   type="email"
+                  value={formData.email}
+                  onChange={(event) => {
+                    setFormData((prev) => ({ ...prev, email: event.target.value }));
+                    setError("");
+                  }}
                   placeholder="ana@primer.si"
+                  autoComplete="email"
                   className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                 />
               </div>
@@ -93,7 +165,13 @@ export default function Prijava() {
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(event) => {
+                      setFormData((prev) => ({ ...prev, password: event.target.value }));
+                      setError("");
+                    }}
                     placeholder="Vnesite geslo"
+                    autoComplete="current-password"
                     className="h-11 w-full rounded-xl border border-[var(--line)] bg-white/70 px-4 pr-12 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                   />
                   <button
@@ -109,9 +187,10 @@ export default function Prijava() {
               {/* Gumb */}
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="mt-2 w-full rounded-full bg-[var(--accent)] py-3 text-sm font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[var(--accent-hover)]"
               >
-                Prijavite se
+                {isSubmitting ? "Prijavljam..." : "Prijavite se"}
               </button>
             </form>
           </div>
