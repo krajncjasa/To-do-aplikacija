@@ -2,11 +2,127 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
+
+type FormFields = {
+  ime: string;
+  priimek: string;
+  email: string;
+  password: string;
+  passwordConfirm: string;
+};
+
+type FieldErrors = Partial<Record<keyof FormFields | "terms", string>>;
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Registracija() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [formData, setFormData] = useState<FormFields>({
+    ime: "",
+    priimek: "",
+    email: "",
+    password: "",
+    passwordConfirm: "",
+  });
+
+  const handleInputChange = (field: keyof FormFields, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+    setError("");
+  };
+
+  const validateForm = () => {
+    const nextErrors: FieldErrors = {};
+
+    if (formData.ime.trim().length < 2) {
+      nextErrors.ime = "Ime mora imeti vsaj 2 znaka.";
+    }
+
+    if (formData.priimek.trim().length < 2) {
+      nextErrors.priimek = "Priimek mora imeti vsaj 2 znaka.";
+    }
+
+    if (!EMAIL_REGEX.test(formData.email.trim())) {
+      nextErrors.email = "Vnesi veljaven e-postni naslov.";
+    }
+
+    if (formData.password.length < 8) {
+      nextErrors.password = "Geslo mora imeti vsaj 8 znakov.";
+    }
+
+    if (formData.passwordConfirm.length < 8) {
+      nextErrors.passwordConfirm = "Potrditveno geslo mora imeti vsaj 8 znakov.";
+    }
+
+    if (
+      formData.password.length >= 8 &&
+      formData.passwordConfirm.length >= 8 &&
+      formData.password !== formData.passwordConfirm
+    ) {
+      nextErrors.passwordConfirm = "Gesli se ne ujemata.";
+    }
+
+    if (!acceptedTerms) {
+      nextErrors.terms = "Za registracijo moras sprejeti pogoje uporabe.";
+    }
+
+    return nextErrors;
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setFieldErrors({});
+
+    const nextErrors = validateForm();
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      setError("Preveri oznacena polja in popravi napake.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const payload: { error?: string; message?: string } = await response.json();
+
+      if (!response.ok) {
+        setError(payload.error ?? "Registracija ni uspela.");
+        return;
+      }
+
+      setSuccess(payload.message ?? "Registracija uspesna.");
+      setFormData({
+        ime: "",
+        priimek: "",
+        email: "",
+        password: "",
+        passwordConfirm: "",
+      });
+      setFieldErrors({});
+      setAcceptedTerms(false);
+    } catch {
+      setError("Napaka povezave s streznikom. Poskusi znova.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
@@ -73,7 +189,27 @@ export default function Registracija() {
               </Link>
             </p>
 
-            <form className="mt-7 space-y-4">
+            <form className="mt-7 space-y-4" onSubmit={handleSubmit} noValidate>
+              {(error || success) && (
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    error
+                      ? "border-amber-300 bg-amber-50 text-amber-900"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                  aria-live="polite"
+                >
+                  {error ? (
+                    <div className="space-y-1">
+                      <p className="font-semibold">Pozor</p>
+                      <p>{error}</p>
+                    </div>
+                  ) : (
+                    success
+                  )}
+                </div>
+              )}
+
               {/* Ime in priimek */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
@@ -82,9 +218,19 @@ export default function Registracija() {
                   </label>
                   <input
                     type="text"
+                    value={formData.ime}
+                    onChange={(event) => handleInputChange("ime", event.target.value)}
                     placeholder="Ana"
-                    className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                    autoComplete="given-name"
+                    className={`h-11 rounded-xl border bg-white/70 px-4 text-sm outline-none transition-colors focus:ring-2 ${
+                      fieldErrors.ime
+                        ? "border-amber-400 focus:border-amber-500 focus:ring-amber-200"
+                        : "border-[var(--line)] focus:border-[var(--accent)] focus:ring-[var(--accent-soft)]"
+                    }`}
                   />
+                  {fieldErrors.ime && (
+                    <p className="text-xs text-amber-800">{fieldErrors.ime}</p>
+                  )}
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted)]">
@@ -92,9 +238,19 @@ export default function Registracija() {
                   </label>
                   <input
                     type="text"
+                    value={formData.priimek}
+                    onChange={(event) => handleInputChange("priimek", event.target.value)}
                     placeholder="Novak"
-                    className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                    autoComplete="family-name"
+                    className={`h-11 rounded-xl border bg-white/70 px-4 text-sm outline-none transition-colors focus:ring-2 ${
+                      fieldErrors.priimek
+                        ? "border-amber-400 focus:border-amber-500 focus:ring-amber-200"
+                        : "border-[var(--line)] focus:border-[var(--accent)] focus:ring-[var(--accent-soft)]"
+                    }`}
                   />
+                  {fieldErrors.priimek && (
+                    <p className="text-xs text-amber-800">{fieldErrors.priimek}</p>
+                  )}
                 </div>
               </div>
 
@@ -105,9 +261,19 @@ export default function Registracija() {
                 </label>
                 <input
                   type="email"
+                  value={formData.email}
+                  onChange={(event) => handleInputChange("email", event.target.value)}
                   placeholder="ana@primer.si"
-                  className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                  autoComplete="email"
+                  className={`h-11 rounded-xl border bg-white/70 px-4 text-sm outline-none transition-colors focus:ring-2 ${
+                    fieldErrors.email
+                      ? "border-amber-400 focus:border-amber-500 focus:ring-amber-200"
+                      : "border-[var(--line)] focus:border-[var(--accent)] focus:ring-[var(--accent-soft)]"
+                  }`}
                 />
+                {fieldErrors.email && (
+                  <p className="text-xs text-amber-800">{fieldErrors.email}</p>
+                )}
               </div>
 
               {/* Geslo */}
@@ -118,8 +284,15 @@ export default function Registracija() {
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(event) => handleInputChange("password", event.target.value)}
                     placeholder="Vsaj 8 znakov"
-                    className="h-11 w-full rounded-xl border border-[var(--line)] bg-white/70 px-4 pr-12 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                    autoComplete="new-password"
+                    className={`h-11 w-full rounded-xl border bg-white/70 px-4 pr-12 text-sm outline-none transition-colors focus:ring-2 ${
+                      fieldErrors.password
+                        ? "border-amber-400 focus:border-amber-500 focus:ring-amber-200"
+                        : "border-[var(--line)] focus:border-[var(--accent)] focus:ring-[var(--accent-soft)]"
+                    }`}
                   />
                   <button
                     type="button"
@@ -129,6 +302,9 @@ export default function Registracija() {
                     {showPassword ? "Skrij" : "Pokaži"}
                   </button>
                 </div>
+                {fieldErrors.password && (
+                  <p className="text-xs text-amber-800">{fieldErrors.password}</p>
+                )}
               </div>
 
               {/* Potrdi geslo */}
@@ -139,8 +315,17 @@ export default function Registracija() {
                 <div className="relative">
                   <input
                     type={showConfirm ? "text" : "password"}
+                    value={formData.passwordConfirm}
+                    onChange={(event) =>
+                      handleInputChange("passwordConfirm", event.target.value)
+                    }
                     placeholder="Ponovi geslo"
-                    className="h-11 w-full rounded-xl border border-[var(--line)] bg-white/70 px-4 pr-12 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                    autoComplete="new-password"
+                    className={`h-11 w-full rounded-xl border bg-white/70 px-4 pr-12 text-sm outline-none transition-colors focus:ring-2 ${
+                      fieldErrors.passwordConfirm
+                        ? "border-amber-400 focus:border-amber-500 focus:ring-amber-200"
+                        : "border-[var(--line)] focus:border-[var(--accent)] focus:ring-[var(--accent-soft)]"
+                    }`}
                   />
                   <button
                     type="button"
@@ -150,12 +335,21 @@ export default function Registracija() {
                     {showConfirm ? "Skrij" : "Pokaži"}
                   </button>
                 </div>
+                {fieldErrors.passwordConfirm && (
+                  <p className="text-xs text-amber-800">{fieldErrors.passwordConfirm}</p>
+                )}
               </div>
 
               {/* Pogoji */}
               <label className="flex items-start gap-3 text-sm text-[var(--muted)]">
                 <input
                   type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(event) => {
+                    setAcceptedTerms(event.target.checked);
+                    setFieldErrors((prev) => ({ ...prev, terms: undefined }));
+                    setError("");
+                  }}
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--line)] accent-[var(--accent)]"
                 />
                 <span>
@@ -170,13 +364,17 @@ export default function Registracija() {
                   .
                 </span>
               </label>
+              {fieldErrors.terms && (
+                <p className="text-xs text-amber-800">{fieldErrors.terms}</p>
+              )}
 
               {/* Gumb */}
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="mt-2 w-full rounded-full bg-[var(--accent)] py-3 text-sm font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[var(--accent-hover)]"
               >
-                Ustvari račun
+                {isSubmitting ? "Ustvarjam racun..." : "Ustvari račun"}
               </button>
             </form>
           </div>

@@ -1,5 +1,45 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Supabase Setup (Registracija)
+
+Za delovanje registracijskega backenda potrebujes:
+
+1. Ustvari Supabase projekt.
+2. V `.env` nastavi:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL="..."
+NEXT_PUBLIC_SUPABASE_ANON_KEY="..."
+SUPABASE_SERVICE_ROLE_KEY="..."
+```
+
+3. V Supabase SQL Editorju zazeni skripto iz `supabase/schema.sql`.
+
+To ustvari tabelo `uporabniki` s stolpci:
+
+- `ime`
+- `priimek`
+- `eposta` (unikatno)
+- `geslo` (shranjen hash gesla, ne surovo geslo)
+
+Registracijski endpoint:
+
+- `POST /api/auth/register`
+
+Primer request body:
+
+```json
+{
+	"ime": "Ana",
+	"priimek": "Novak",
+	"email": "ana@primer.si",
+	"password": "geslo1234",
+	"passwordConfirm": "geslo1234"
+}
+```
+
+Ob uspesni registraciji endpoint vrne uporabnika brez polja `geslo`.
+
 ## Getting Started
 
 First, run the development server:
