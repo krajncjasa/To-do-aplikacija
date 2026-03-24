@@ -24,16 +24,6 @@ const resolveTaskId = async (paramsPromise: RouteContext["params"]) => {
   return id;
 };
 
-const normalizeDateKeys = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item));
-};
-
 export async function GET(
   request: NextRequest,
   { params }: RouteContext
@@ -67,7 +57,7 @@ export async function GET(
 
     const { data: opravilo, error } = await supabaseAdmin
       .from("opravila")
-      .select("id, naslov, opis, od, do, kolikokrat, opravljeno, opravljeno_datumi, created_at, uporabnik_id")
+      .select("id, naslov, opis, od, do, kolikokrat, opravljeno, created_at, uporabnik_id")
       .eq("id", taskId)
       .single();
 
@@ -196,7 +186,7 @@ export async function PUT(
         kolikokrat: ponavljanje,
       })
       .eq("id", taskId)
-      .select("id, naslov, opis, od, do, kolikokrat, opravljeno, opravljeno_datumi, created_at")
+      .select("id, naslov, opis, od, do, kolikokrat, opravljeno, created_at")
       .single();
 
     if (updateError) {
@@ -249,7 +239,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { opravljeno, occurrenceDate } = body;
+    const { opravljeno } = body;
 
     if (typeof opravljeno !== "boolean") {
       return NextResponse.json(
@@ -261,7 +251,7 @@ export async function PATCH(
     // Preveri, da je opravilo lastnika uporabnika
     const { data: opravilo, error: fetchError } = await supabaseAdmin
       .from("opravila")
-      .select("id, uporabnik_id, kolikokrat, opravljeno_datumi")
+      .select("id, uporabnik_id")
       .eq("id", taskId)
       .single();
 
@@ -279,41 +269,12 @@ export async function PATCH(
       );
     }
 
-    const isRecurring = opravilo.kolikokrat !== "samo_enkrat";
-
-    let updatePayload: {
-      opravljeno?: boolean;
-      opravljeno_datumi?: string[];
-    } = { opravljeno };
-
-    if (isRecurring) {
-      if (typeof occurrenceDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(occurrenceDate)) {
-        return NextResponse.json(
-          { error: "Pri ponavljajočem opravilu manjka veljaven datum pojavnosti" },
-          { status: 400 }
-        );
-      }
-
-      const currentDates = normalizeDateKeys(opravilo.opravljeno_datumi);
-      const nextDates = new Set(currentDates);
-
-      if (opravljeno) {
-        nextDates.add(occurrenceDate);
-      } else {
-        nextDates.delete(occurrenceDate);
-      }
-
-      updatePayload = {
-        opravljeno_datumi: Array.from(nextDates).sort(),
-      };
-    }
-
-    // Posodobi opravljeno stanje
+    // Posodobi opravljeno polje
     const { data: updated, error: updateError } = await supabaseAdmin
       .from("opravila")
-      .update(updatePayload)
+      .update({ opravljeno })
       .eq("id", taskId)
-      .select("id, naslov, opis, od, do, kolikokrat, opravljeno, opravljeno_datumi, created_at")
+      .select()
       .single();
 
     if (updateError) {

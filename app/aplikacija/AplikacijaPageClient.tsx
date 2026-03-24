@@ -11,13 +11,11 @@ interface Opravilo {
   do: string;
   kolikokrat: string;
   opravljeno: boolean;
-  opravljeno_datumi: string[];
   created_at: string;
 }
 
-type RawOpravilo = Omit<Opravilo, "opravljeno" | "opravljeno_datumi"> & {
+type RawOpravilo = Omit<Opravilo, "opravljeno"> & {
   opravljeno: boolean | string | number | null;
-  opravljeno_datumi?: unknown;
 };
 
 export default function AplikacijaPageClient() {
@@ -41,23 +39,9 @@ export default function AplikacijaPageClient() {
     return false;
   };
 
-  const parseOpravljenoDatumi = (value: RawOpravilo["opravljeno_datumi"]) => {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    return value
-      .filter((item): item is string => typeof item === "string")
-      .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item));
-  };
-
-  const getSafeOpravljenoDatumi = (opravilo: Opravilo) =>
-    Array.isArray(opravilo.opravljeno_datumi) ? opravilo.opravljeno_datumi : [];
-
   const normalizeOpravilo = (raw: RawOpravilo): Opravilo => ({
     ...raw,
     opravljeno: parseOpravljeno(raw.opravljeno),
-    opravljeno_datumi: parseOpravljenoDatumi(raw.opravljeno_datumi),
   });
 
   const fetchOpravila = async () => {
@@ -81,28 +65,14 @@ export default function AplikacijaPageClient() {
   const toggleOpravilo = async (
     id: number,
     trenutnoOpravljeno: boolean,
-    novoOpravljeno: boolean,
-    occurrenceDate?: string,
-    isRecurring?: boolean
+    novoOpravljeno: boolean
   ) => {
 
     // Takoj preklopi stanje v UI, da je drugi klik vedno možen (označi/odznači)
     setOpravila((prev) =>
-      prev.map((op) => {
-        if (op.id !== id) return op;
-
-        if (isRecurring && occurrenceDate) {
-          const current = new Set(getSafeOpravljenoDatumi(op));
-          if (novoOpravljeno) {
-            current.add(occurrenceDate);
-          } else {
-            current.delete(occurrenceDate);
-          }
-          return { ...op, opravljeno_datumi: Array.from(current).sort() };
-        }
-
-        return { ...op, opravljeno: novoOpravljeno };
-      })
+      prev.map((op) =>
+        op.id === id ? { ...op, opravljeno: novoOpravljeno } : op
+      )
     );
 
     try {
@@ -111,50 +81,28 @@ export default function AplikacijaPageClient() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ opravljeno: novoOpravljeno, occurrenceDate }),
+        body: JSON.stringify({ opravljeno: novoOpravljeno }),
       });
 
       const result = (await response.json().catch(() => null)) as
-        | {
-            opravilo?: {
-              id: number;
-              opravljeno: boolean | string | number | null;
-              opravljeno_datumi?: unknown;
-            };
-            error?: string;
-          }
+        | { opravilo?: { id: number; opravljeno: boolean | string | number | null }; error?: string }
         | null;
 
       if (!response.ok) {
         console.error(result?.error || "Napaka pri posodabljanju opravila");
         setOpravila((prev) =>
-          prev.map((op) => {
-            if (op.id !== id) return op;
-
-            if (isRecurring && occurrenceDate) {
-              const reverted = new Set(getSafeOpravljenoDatumi(op));
-              if (trenutnoOpravljeno) {
-                reverted.add(occurrenceDate);
-              } else {
-                reverted.delete(occurrenceDate);
-              }
-              return { ...op, opravljeno_datumi: Array.from(reverted).sort() };
-            }
-
-            return { ...op, opravljeno: trenutnoOpravljeno };
-          })
+          prev.map((op) =>
+            op.id === id ? { ...op, opravljeno: trenutnoOpravljeno } : op
+          )
         );
         return;
       }
 
       if (result?.opravilo) {
         const apiOpravljeno = parseOpravljeno(result.opravilo.opravljeno);
-        const apiOpravljenoDatumi = parseOpravljenoDatumi(result.opravilo.opravljeno_datumi);
         setOpravila((prev) =>
           prev.map((op) =>
-            op.id === id
-              ? { ...op, opravljeno: apiOpravljeno, opravljeno_datumi: apiOpravljenoDatumi }
-              : op
+            op.id === id ? { ...op, opravljeno: apiOpravljeno } : op
           )
         );
       } else {
@@ -163,21 +111,9 @@ export default function AplikacijaPageClient() {
     } catch (err) {
       console.error("Napaka pri posodabljanju opravila:", err);
       setOpravila((prev) =>
-        prev.map((op) => {
-          if (op.id !== id) return op;
-
-          if (isRecurring && occurrenceDate) {
-            const reverted = new Set(getSafeOpravljenoDatumi(op));
-            if (trenutnoOpravljeno) {
-              reverted.add(occurrenceDate);
-            } else {
-              reverted.delete(occurrenceDate);
-            }
-            return { ...op, opravljeno_datumi: Array.from(reverted).sort() };
-          }
-
-          return { ...op, opravljeno: trenutnoOpravljeno };
-        })
+        prev.map((op) =>
+          op.id === id ? { ...op, opravljeno: trenutnoOpravljeno } : op
+        )
       );
     }
   };
@@ -358,63 +294,6 @@ export default function AplikacijaPageClient() {
     return date.toLocaleDateString("sl-SI", { year: "numeric", month: "2-digit", day: "2-digit" });
   };
 
-  const dateKey = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  const getOccurrenceDateInRange = (opravilo: Opravilo, startDate: Date, endDate: Date) => {
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      if (doesOpravljoHappenOnDate(opravilo, d)) {
-        return new Date(d);
-      }
-    }
-
-    return null;
-  };
-
-  const getOccurrenceDateForTask = (opravilo: Opravilo) => {
-    if (filterMode === "specifičen_dan" && selectedDate) {
-      return doesOpravljoHappenOnDate(opravilo, selectedDate)
-        ? new Date(selectedDate)
-        : null;
-    }
-
-    if (filterMode === "ta_teden") {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const weekEnd = getWeekEnd(today);
-      return getOccurrenceDateInRange(opravilo, today, weekEnd);
-    }
-
-    const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-    return getOccurrenceDateInRange(opravilo, monthStart, monthEnd);
-  };
-
-  const isTaskChecked = (opravilo: Opravilo) => {
-    const recurrence = normalizeKolikokrat(opravilo.kolikokrat);
-
-    if (recurrence === "samo_enkrat") {
-      return opravilo.opravljeno;
-    }
-
-    const occurrenceDate = getOccurrenceDateForTask(opravilo);
-    if (!occurrenceDate) {
-      return false;
-    }
-
-    return getSafeOpravljenoDatumi(opravilo).includes(dateKey(occurrenceDate));
-  };
-
   return (
     <>
       <section className="mt-8 grid gap-8 lg:grid-cols-3">
@@ -532,18 +411,10 @@ export default function AplikacijaPageClient() {
           ) : (
             <div className="space-y-3">
               {sortedOpravila.map((opravilo) => (
-                (() => {
-                  const recurrence = normalizeKolikokrat(opravilo.kolikokrat);
-                  const isRecurring = recurrence !== "samo_enkrat";
-                  const occurrenceDate = getOccurrenceDateForTask(opravilo);
-                  const occurrenceDateKey = occurrenceDate ? dateKey(occurrenceDate) : undefined;
-                  const checked = isTaskChecked(opravilo);
-
-                  return (
                 <div
                   key={opravilo.id}
                   className={`rounded-xl border p-4 transition-all ${
-                    checked
+                    opravilo.opravljeno
                       ? "border-emerald-200 bg-emerald-50/95 shadow-[0_14px_28px_-24px_rgba(16,185,129,0.65)]"
                       : "border-[var(--line)] bg-white/50 hover:border-[var(--accent)] hover:bg-white"
                   }`}
@@ -551,22 +422,20 @@ export default function AplikacijaPageClient() {
                   <div className="flex items-start gap-3">
                     <label
                       className="group mt-0.5 inline-flex cursor-pointer items-center"
-                      title={checked ? "Označi kot neopravljeno" : "Označi kot opravljeno"}
+                      title={opravilo.opravljeno ? "Označi kot neopravljeno" : "Označi kot opravljeno"}
                     >
                       <input
                         type="checkbox"
-                        checked={checked}
+                        checked={opravilo.opravljeno}
                         onChange={(e) =>
                           toggleOpravilo(
                             opravilo.id,
-                            checked,
-                            e.target.checked,
-                            occurrenceDateKey,
-                            isRecurring
+                            opravilo.opravljeno,
+                            e.target.checked
                           )
                         }
                         className="peer sr-only"
-                        aria-label={checked ? "Označi kot neopravljeno" : "Označi kot opravljeno"}
+                        aria-label={opravilo.opravljeno ? "Označi kot neopravljeno" : "Označi kot opravljeno"}
                       />
                       <span className="flex h-6 w-6 items-center justify-center rounded-lg border border-[var(--line)] bg-white/90 text-white shadow-[0_8px_18px_-12px_rgba(29,37,51,0.55)] transition-all duration-200 group-hover:border-[var(--accent)] group-hover:bg-[var(--accent-soft)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--accent-soft)] peer-checked:border-green-500 peer-checked:bg-green-500 peer-checked:shadow-[0_10px_22px_-10px_rgba(34,197,94,0.55)]">
                         <svg
@@ -587,7 +456,7 @@ export default function AplikacijaPageClient() {
                     </label>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
-                        <h3 className={`min-w-0 font-semibold ${checked ? "line-through text-[var(--muted)]" : "text-[var(--foreground)]"}`}>
+                        <h3 className={`min-w-0 font-semibold ${opravilo.opravljeno ? "line-through text-[var(--muted)]" : "text-[var(--foreground)]"}`}>
                           {opravilo.naslov}
                         </h3>
                         <Link
@@ -598,7 +467,7 @@ export default function AplikacijaPageClient() {
                         </Link>
                       </div>
                       {opravilo.opis && (
-                        <p className={`mt-1 text-sm line-clamp-2 ${checked ? "text-[var(--muted)]" : "text-[var(--muted)]"}`}>
+                        <p className={`mt-1 text-sm line-clamp-2 ${opravilo.opravljeno ? "text-[var(--muted)]" : "text-[var(--muted)]"}`}>
                           {opravilo.opis}
                         </p>
                       )}
@@ -616,8 +485,6 @@ export default function AplikacijaPageClient() {
                     </div>
                   </div>
                 </div>
-                  );
-                })()
               ))}
             </div>
           )}
