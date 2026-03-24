@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifySessionToken } from "@/lib/session";
 import Sidebar from "@/app/components/Sidebar";
+import AplikacijaPageClient from "./AplikacijaPageClient";
 
 export default async function AplikacijaPage() {
   const cookieStore = await cookies();
@@ -36,31 +37,7 @@ export default async function AplikacijaPage() {
           </form>
         </header>
 
-        <section className="mt-8 grid max-w-4xl gap-5 md:grid-cols-3">
-          {[
-            {
-              title: "Moje naloge",
-              desc: "Upravljaj dnevne naloge, dodaj roke in spremljaj napredek.",
-            },
-            {
-              title: "Prioritete",
-              desc: "Najpomembnejse opravke imej vedno na vrhu seznama.",
-            },
-            {
-              title: "Teden v pregledu",
-              desc: "Hitro preveri, kaj je zakljuceno in kaj se caka.",
-            },
-          ].map((item) => (
-            <article
-              key={item.title}
-              className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_20px_45px_-34px_rgba(29,37,51,0.45)]"
-            >
-              <h2 className="font-display text-xl">{item.title}</h2>
-              <p className="mt-3 text-sm leading-7 text-[var(--muted)]">{item.desc}</p>
-            </article>
-          ))}
-        </section>
-
+        <AplikacijaPageClient />
       </main>
     </div>
   );

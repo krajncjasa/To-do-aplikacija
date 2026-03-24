@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/app/components/Sidebar";
 import { useState, type FormEvent } from "react";
 
 export default function NovoOpravilo() {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     naslov: "",
     opis: "",
@@ -13,9 +17,76 @@ export default function NovoOpravilo() {
     ponavljanje: "samo_enkrat",
   });
 
+  const getMinDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const getMinDateTimeForDo = () => {
+    if (!formData.odKdaj) {
+      return getMinDateTime();
+    }
+    return formData.odKdaj;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    console.log("Poslano:", formData);
+    setSubmitError(null);
+
+    if (!formData.naslov.trim() || !formData.odKdaj || !formData.doKdaj) {
+      setSubmitError("Naslov, od kdaj in do kdaj so obvezni");
+      return;
+    }
+
+    // Zaokroži "sedaj" na celo minuto (brez sekund/milisekund)
+    const now = new Date();
+    now.setSeconds(0, 0);
+    const nowTime = now.getTime();
+
+    const odKdajTime = new Date(formData.odKdaj).getTime();
+    const doKdajTime = new Date(formData.doKdaj).getTime();
+
+    if (odKdajTime < nowTime) {
+      setSubmitError("Od kdaj ne sme biti v preteklosti");
+      return;
+    }
+
+    if (doKdajTime < nowTime) {
+      setSubmitError("Do kdaj ne sme biti v preteklosti");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/opravila", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const result = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+
+      if (!response.ok) {
+        setSubmitError(result?.error || "Napaka pri ustvarjanju opravila");
+        return;
+      }
+
+      router.push("/aplikacija");
+    } catch {
+      setSubmitError("Napaka pri povezavi s streznikom");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -45,6 +116,12 @@ export default function NovoOpravilo() {
 
         <section className="mt-8 mx-auto w-11/12 rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-10 shadow-[0_20px_45px_-34px_rgba(29,37,51,0.45)]">
           <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+            {submitError && (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {submitError}
+              </p>
+            )}
+
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted)]">
                 Naslov
@@ -82,13 +159,18 @@ export default function NovoOpravilo() {
                 </label>
                 <input
                   type="datetime-local"
+                  min={getMinDateTime()}
                   value={formData.odKdaj}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      odKdaj: e.target.value,
-                    }))
-                  }
+                  onChange={(e) => {
+                    const newOdKdaj = e.target.value;
+                    setFormData((prev) => {
+                      const updated = { ...prev, odKdaj: newOdKdaj };
+                      if (updated.doKdaj && new Date(newOdKdaj).getTime() > new Date(updated.doKdaj).getTime()) {
+                        updated.doKdaj = "";
+                      }
+                      return updated;
+                    });
+                  }}
                   className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                 />
               </div>
@@ -99,6 +181,7 @@ export default function NovoOpravilo() {
                 </label>
                 <input
                   type="datetime-local"
+                  min={getMinDateTimeForDo()}
                   value={formData.doKdaj}
                   onChange={(e) =>
                     setFormData((prev) => ({
@@ -136,9 +219,10 @@ export default function NovoOpravilo() {
             <div className="mt-8 flex gap-3">
               <button
                 type="submit"
-                className="rounded-full bg-[var(--accent)] px-6 py-2 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 hover:bg-[var(--accent-hover)]"
+                disabled={isSubmitting}
+                className="rounded-full bg-[var(--accent)] px-6 py-2 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
               >
-                Ustvari opravilo
+                {isSubmitting ? "Shranjujem..." : "Ustvari opravilo"}
               </button>
               <Link
                 href="/aplikacija"
