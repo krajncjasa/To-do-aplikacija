@@ -97,8 +97,9 @@ export async function POST(request: NextRequest) {
         do: doKdaj,
         uporabnik_id: sessionUser.id,
         kolikokrat: ponavljanje,
+        opravljeno_datumi: [],
       })
-      .select("id, naslov, opis, od, do, uporabnik_id, kolikokrat, opravljeno")
+      .select("id, naslov, opis, od, do, uporabnik_id, kolikokrat, opravljeno, opravljeno_datumi")
       .single();
 
     if (error) {
@@ -139,7 +140,7 @@ export async function GET(request: NextRequest) {
 
     const { data: opravila, error } = await supabaseAdmin
       .from("opravila")
-      .select("id, naslov, opis, od, do, uporabnik_id, kolikokrat, opravljeno, created_at")
+      .select("id, naslov, opis, od, do, uporabnik_id, kolikokrat, opravljeno, opravljeno_datumi, created_at")
       .eq("uporabnik_id", sessionUser.id)
       .order("od", { ascending: true });
 
