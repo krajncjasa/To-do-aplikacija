@@ -24,6 +24,51 @@ const resolveTaskId = async (paramsPromise: RouteContext["params"]) => {
   return id;
 };
 
+const toDatePart = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const cloneDateTimeToClickedDate = (sourceDateTime: string, clickedDate: Date) => {
+  const source = new Date(sourceDateTime);
+
+  if (Number.isNaN(source.getTime())) {
+    return null;
+  }
+
+  const hours = String(source.getHours()).padStart(2, "0");
+  const minutes = String(source.getMinutes()).padStart(2, "0");
+  const seconds = String(source.getSeconds()).padStart(2, "0");
+
+  return `${toDatePart(clickedDate)}T${hours}:${minutes}:${seconds}`;
+};
+
+const parseDateOnly = (value: string) => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+};
+
 export async function GET(
   request: NextRequest,
   { params }: RouteContext
@@ -240,6 +285,8 @@ export async function PATCH(
 
     const body = await request.json();
     const { opravljeno } = body;
+    const datumKljuka = typeof body.datumKljuka === "string" ? body.datumKljuka : "";
+    const clickedDate = parseDateOnly(datumKljuka);
 
     if (typeof opravljeno !== "boolean") {
       return NextResponse.json(
@@ -248,10 +295,17 @@ export async function PATCH(
       );
     }
 
+    if (opravljeno && !clickedDate) {
+      return NextResponse.json(
+        { error: "Neveljaven datum klika" },
+        { status: 400 }
+      );
+    }
+
     // Preveri, da je opravilo lastnika uporabnika
     const { data: opravilo, error: fetchError } = await supabaseAdmin
       .from("opravila")
-      .select("id, uporabnik_id")
+      .select("id, uporabnik_id, naslov, opis, od, do, kolikokrat, vrsta, opravljeno")
       .eq("id", taskId)
       .single();
 
@@ -269,23 +323,46 @@ export async function PATCH(
       );
     }
 
-    // Posodobi opravljeno polje
-    const { data: updated, error: updateError } = await supabaseAdmin
-      .from("opravila")
-      .update({ opravljeno })
-      .eq("id", taskId)
-      .select()
-      .single();
+    // Ko uporabnik označi opravilo kot opravljeno, se ustvari kopija z opravljeno=true,
+    // glavno opravilo pa ostane nespremenjeno (opravljeno ostane null).
+    if (opravljeno) {
+      const klonOd = cloneDateTimeToClickedDate(opravilo.od, clickedDate);
+      const klonDo = cloneDateTimeToClickedDate(opravilo.do, clickedDate);
 
-    if (updateError) {
-      console.error("Update task error:", updateError);
-      return NextResponse.json(
-        { error: "Napaka pri posodabljanju opravila" },
-        { status: 500 }
-      );
+      if (!klonOd || !klonDo) {
+        return NextResponse.json(
+          { error: "Napaka pri pripravi datuma kloniranega opravila" },
+          { status: 400 }
+        );
+      }
+
+      const { data: created, error: createError } = await supabaseAdmin
+        .from("opravila")
+        .insert({
+          naslov: opravilo.naslov,
+          opis: opravilo.opis,
+          od: klonOd,
+          do: klonDo,
+          uporabnik_id: sessionUser.id,
+          kolikokrat: "samo_enkrat",
+          vrsta: "klon",
+          opravljeno: true,
+        })
+        .select("id, naslov, opis, od, do, kolikokrat, vrsta, opravljeno, created_at")
+        .single();
+
+      if (createError) {
+        console.error("Create completed task copy error:", createError);
+        return NextResponse.json(
+          { error: "Napaka pri ustvarjanju kopije opravila" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ opravilo: created }, { status: 201 });
     }
 
-    return NextResponse.json({ opravilo: updated }, { status: 200 });
+    return NextResponse.json({ opravilo }, { status: 200 });
   } catch (err) {
     console.error("PATCH /api/opravila/[id] error:", err);
     return NextResponse.json(

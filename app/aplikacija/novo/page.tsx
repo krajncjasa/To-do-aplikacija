@@ -17,6 +17,8 @@ export default function NovoOpravilo() {
     ponavljanje: "samo_enkrat",
   });
 
+  const isRepeating = formData.ponavljanje !== "samo_enkrat";
+
   const getMinDateTime = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -34,12 +36,21 @@ export default function NovoOpravilo() {
     return formData.odKdaj;
   };
 
+  const toDateTimeLocalValue = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitError(null);
 
-    if (!formData.naslov.trim() || !formData.odKdaj || !formData.doKdaj) {
-      setSubmitError("Naslov, od kdaj in do kdaj so obvezni");
+    if (!formData.naslov.trim()) {
+      setSubmitError("Naslov je obvezen");
       return;
     }
 
@@ -48,8 +59,26 @@ export default function NovoOpravilo() {
     now.setSeconds(0, 0);
     const nowTime = now.getTime();
 
-    const odKdajTime = new Date(formData.odKdaj).getTime();
-    const doKdajTime = new Date(formData.doKdaj).getTime();
+    const odKdajDateTime = formData.odKdaj || getMinDateTime();
+
+    let doKdajDateTime = "";
+    if (formData.doKdaj) {
+      doKdajDateTime = isRepeating
+        ? `${odKdajDateTime.split("T")[0]}T${formData.doKdaj}`
+        : formData.doKdaj;
+    } else {
+      const defaultDo = new Date(odKdajDateTime);
+      defaultDo.setHours(defaultDo.getHours() + 1);
+      doKdajDateTime = toDateTimeLocalValue(defaultDo);
+    }
+
+    const odKdajTime = new Date(odKdajDateTime).getTime();
+    const doKdajTime = new Date(doKdajDateTime).getTime();
+
+    if (Number.isNaN(odKdajTime) || Number.isNaN(doKdajTime)) {
+      setSubmitError("Neveljaven datum ali čas");
+      return;
+    }
 
     if (odKdajTime < nowTime) {
       setSubmitError("Od kdaj ne sme biti v preteklosti");
@@ -61,6 +90,11 @@ export default function NovoOpravilo() {
       return;
     }
 
+    if (doKdajTime <= odKdajTime) {
+      setSubmitError("Do kdaj mora biti po Od kdaj");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -69,7 +103,11 @@ export default function NovoOpravilo() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          odKdaj: odKdajDateTime,
+          doKdaj: doKdajDateTime,
+        }),
       });
 
       const result = (await response.json().catch(() => null)) as
@@ -165,8 +203,15 @@ export default function NovoOpravilo() {
                     const newOdKdaj = e.target.value;
                     setFormData((prev) => {
                       const updated = { ...prev, odKdaj: newOdKdaj };
-                      if (updated.doKdaj && new Date(newOdKdaj).getTime() > new Date(updated.doKdaj).getTime()) {
-                        updated.doKdaj = "";
+                      if (updated.doKdaj) {
+                        const updatedDo =
+                          updated.ponavljanje === "samo_enkrat"
+                            ? updated.doKdaj
+                            : `${newOdKdaj.split("T")[0]}T${updated.doKdaj}`;
+
+                        if (new Date(newOdKdaj).getTime() > new Date(updatedDo).getTime()) {
+                          updated.doKdaj = "";
+                        }
                       }
                       return updated;
                     });
@@ -180,9 +225,14 @@ export default function NovoOpravilo() {
                   Do kdaj
                 </label>
                 <input
-                  type="datetime-local"
-                  min={getMinDateTimeForDo()}
+                  type={isRepeating ? "time" : "datetime-local"}
+                  min={
+                    isRepeating
+                      ? (formData.odKdaj ? formData.odKdaj.split("T")[1]?.slice(0, 5) : undefined)
+                      : getMinDateTimeForDo()
+                  }
                   value={formData.doKdaj}
+                  disabled={isRepeating && !formData.odKdaj}
                   onChange={(e) =>
                     setFormData((prev) => ({
                       ...prev,
@@ -201,10 +251,17 @@ export default function NovoOpravilo() {
               <select
                 value={formData.ponavljanje}
                 onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    ponavljanje: e.target.value,
-                  }))
+                  setFormData((prev) => {
+                    const nextPonavljanje = e.target.value;
+                    const wasRepeating = prev.ponavljanje !== "samo_enkrat";
+                    const willBeRepeating = nextPonavljanje !== "samo_enkrat";
+
+                    return {
+                      ...prev,
+                      ponavljanje: nextPonavljanje,
+                      doKdaj: wasRepeating !== willBeRepeating ? "" : prev.doKdaj,
+                    };
+                  })
                 }
                 className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
               >

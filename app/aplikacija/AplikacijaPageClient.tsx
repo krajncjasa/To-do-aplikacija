@@ -10,6 +10,7 @@ interface Opravilo {
   od: string;
   do: string;
   kolikokrat: string;
+  vrsta: string | null;
   opravljeno: boolean;
   created_at: string;
 }
@@ -24,6 +25,8 @@ export default function AplikacijaPageClient() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [filterMode, setFilterMode] = useState<"ta_teden" | "vsi_dnevi" | "specifičen_dan">("ta_teden");
+  const [showMonthYearPicker, setShowMonthYearPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
 
   useEffect(() => {
     fetchOpravila();
@@ -64,24 +67,19 @@ export default function AplikacijaPageClient() {
 
   const toggleOpravilo = async (
     id: number,
-    trenutnoOpravljeno: boolean,
-    novoOpravljeno: boolean
+    novoOpravljeno: boolean,
+    datumKljuka: Date
   ) => {
-
-    // Takoj preklopi stanje v UI, da je drugi klik vedno možen (označi/odznači)
-    setOpravila((prev) =>
-      prev.map((op) =>
-        op.id === id ? { ...op, opravljeno: novoOpravljeno } : op
-      )
-    );
-
     try {
       const response = await fetch(`/api/opravila/${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ opravljeno: novoOpravljeno }),
+        body: JSON.stringify({
+          opravljeno: novoOpravljeno,
+          datumKljuka: toDateOnly(datumKljuka),
+        }),
       });
 
       const result = (await response.json().catch(() => null)) as
@@ -90,31 +88,12 @@ export default function AplikacijaPageClient() {
 
       if (!response.ok) {
         console.error(result?.error || "Napaka pri posodabljanju opravila");
-        setOpravila((prev) =>
-          prev.map((op) =>
-            op.id === id ? { ...op, opravljeno: trenutnoOpravljeno } : op
-          )
-        );
         return;
       }
 
-      if (result?.opravilo) {
-        const apiOpravljeno = parseOpravljeno(result.opravilo.opravljeno);
-        setOpravila((prev) =>
-          prev.map((op) =>
-            op.id === id ? { ...op, opravljeno: apiOpravljeno } : op
-          )
-        );
-      } else {
-        await fetchOpravila();
-      }
+      await fetchOpravila();
     } catch (err) {
       console.error("Napaka pri posodabljanju opravila:", err);
-      setOpravila((prev) =>
-        prev.map((op) =>
-          op.id === id ? { ...op, opravljeno: trenutnoOpravljeno } : op
-        )
-      );
     }
   };
 
@@ -134,6 +113,16 @@ export default function AplikacijaPageClient() {
 
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
+  const goToMonthYear = (monthIndex: number, year: number) => {
+    setCurrentDate(new Date(year, monthIndex, 1));
+    setShowMonthYearPicker(false);
+  };
+  const goToCurrentMonth = () => {
+    const today = new Date();
+    setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
+    setPickerYear(today.getFullYear());
+    setShowMonthYearPicker(false);
+  };
 
   const getWeekStart = (date: Date) => {
     const newDate = new Date(date);
@@ -211,9 +200,54 @@ export default function AplikacijaPageClient() {
     }
   };
 
+  const hasSameTimeOfDay = (a: string, b: string) => {
+    const aDate = new Date(a);
+    const bDate = new Date(b);
+
+    return (
+      aDate.getHours() === bDate.getHours() &&
+      aDate.getMinutes() === bDate.getMinutes() &&
+      aDate.getSeconds() === bDate.getSeconds()
+    );
+  };
+
+  const hasKlonForMainOnDate = (mainTask: Opravilo, checkDate: Date) => {
+    return opravila.some((candidate) => {
+      if (candidate.vrsta !== "klon") {
+        return false;
+      }
+
+      if (candidate.naslov !== mainTask.naslov) {
+        return false;
+      }
+
+      if ((candidate.opis || "") !== (mainTask.opis || "")) {
+        return false;
+      }
+
+      if (!hasSameTimeOfDay(candidate.od, mainTask.od) || !hasSameTimeOfDay(candidate.do, mainTask.do)) {
+        return false;
+      }
+
+      return toUtcDayMs(new Date(candidate.od)) === toUtcDayMs(checkDate);
+    });
+  };
+
+  const isVisibleOnDate = (opravilo: Opravilo, checkDate: Date) => {
+    if (!doesOpravljoHappenOnDate(opravilo, checkDate)) {
+      return false;
+    }
+
+    if (opravilo.vrsta !== "glavno") {
+      return true;
+    }
+
+    return !hasKlonForMainOnDate(opravilo, checkDate);
+  };
+
   const filteredOpravila = 
     filterMode === "specifičen_dan" && selectedDate
-      ? opravila.filter((op) => doesOpravljoHappenOnDate(op, selectedDate))
+      ? opravila.filter((op) => isVisibleOnDate(op, selectedDate))
       : filterMode === "ta_teden"
         ? opravila.filter((op) => {
             const today = new Date();
@@ -221,7 +255,7 @@ export default function AplikacijaPageClient() {
             const weekEnd = getWeekEnd(today);
             // Za "Ta teden" upoštevamo od danes do nedelje.
             for (let d = new Date(today); d <= weekEnd; d.setDate(d.getDate() + 1)) {
-              if (doesOpravljoHappenOnDate(op, new Date(d))) {
+              if (isVisibleOnDate(op, new Date(d))) {
                 return true;
               }
             }
@@ -234,7 +268,7 @@ export default function AplikacijaPageClient() {
             monthEnd.setHours(23, 59, 59, 999);
             
             for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
-              if (doesOpravljoHappenOnDate(op, new Date(d))) {
+              if (isVisibleOnDate(op, new Date(d))) {
                 return true;
               }
             }
@@ -294,15 +328,74 @@ export default function AplikacijaPageClient() {
     return date.toLocaleDateString("sl-SI", { year: "numeric", month: "2-digit", day: "2-digit" });
   };
 
+  const formatDateFromDate = (date: Date) =>
+    date.toLocaleDateString("sl-SI", { year: "numeric", month: "2-digit", day: "2-digit" });
+
+  const getDisplayDateForTask = (opravilo: Opravilo) => {
+    if (filterMode === "specifičen_dan" && selectedDate) {
+      return selectedDate;
+    }
+
+    if (opravilo.vrsta === "klon") {
+      return new Date(opravilo.od);
+    }
+
+    if (filterMode === "ta_teden") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const weekEnd = getWeekEnd(today);
+
+      for (let d = new Date(today); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+        if (isVisibleOnDate(opravilo, new Date(d))) {
+          return new Date(d);
+        }
+      }
+    }
+
+    const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+    for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+      if (isVisibleOnDate(opravilo, new Date(d))) {
+        return new Date(d);
+      }
+    }
+
+    return new Date(opravilo.od);
+  };
+
+  const getKlikDatum = () => {
+    if (filterMode === "specifičen_dan" && selectedDate) {
+      return selectedDate;
+    }
+
+    return new Date();
+  };
+
+  const toDateOnly = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   return (
     <>
       <section className="mt-8 grid gap-8 lg:grid-cols-3">
         {/* Koledar */}
         <div className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_20px_45px_-34px_rgba(29,37,51,0.45)]">
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="font-display text-xl">
+          <div className="relative mb-6 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                setPickerYear(currentDate.getFullYear());
+                setShowMonthYearPicker((prev) => !prev);
+              }}
+              className="font-display rounded-lg px-2 py-1 text-xl transition-colors hover:bg-[var(--accent-soft)]"
+              title="Izberi mesec in leto"
+            >
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-            </h2>
+            </button>
             <div className="flex gap-2">
               <button
                 onClick={prevMonth}
@@ -317,6 +410,63 @@ export default function AplikacijaPageClient() {
                 →
               </button>
             </div>
+
+            {showMonthYearPicker && (
+              <div className="absolute left-0 top-12 z-20 w-full rounded-2xl border border-[var(--line)] bg-white p-4 shadow-[0_20px_45px_-34px_rgba(29,37,51,0.45)]">
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPickerYear((prev) => prev - 1)}
+                    className="rounded-lg border border-[var(--line)] px-3 py-1 text-sm hover:bg-[var(--accent-soft)]"
+                  >
+                    ←
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                      {pickerYear}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={goToCurrentMonth}
+                      className="rounded-lg border border-[var(--line)] px-2 py-1 text-xs font-semibold hover:bg-[var(--accent-soft)]"
+                      title="Pojdi na trenutni mesec"
+                    >
+                      Danes
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPickerYear((prev) => prev + 1)}
+                    className="rounded-lg border border-[var(--line)] px-3 py-1 text-sm hover:bg-[var(--accent-soft)]"
+                  >
+                    →
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {monthNames.map((monthName, index) => {
+                    const isActive =
+                      currentDate.getFullYear() === pickerYear &&
+                      currentDate.getMonth() === index;
+
+                    return (
+                      <button
+                        key={monthName}
+                        type="button"
+                        onClick={() => goToMonthYear(index, pickerYear)}
+                        className={`rounded-lg border px-2 py-2 text-sm font-semibold transition-colors ${
+                          isActive
+                            ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                            : "border-[var(--line)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
+                        }`}
+                      >
+                        {monthName}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Dan v tednu */}
@@ -411,6 +561,11 @@ export default function AplikacijaPageClient() {
           ) : (
             <div className="space-y-3">
               {sortedOpravila.map((opravilo) => (
+                (() => {
+                  const isKlon = opravilo.vrsta === "klon";
+                  const displayDate = getDisplayDateForTask(opravilo);
+
+                  return (
                 <div
                   key={opravilo.id}
                   className={`rounded-xl border p-4 transition-all ${
@@ -422,20 +577,21 @@ export default function AplikacijaPageClient() {
                   <div className="flex items-start gap-3">
                     <label
                       className="group mt-0.5 inline-flex cursor-pointer items-center"
-                      title={opravilo.opravljeno ? "Označi kot neopravljeno" : "Označi kot opravljeno"}
+                      title={isKlon ? "Klonirano opravilo" : opravilo.opravljeno ? "Označi kot neopravljeno" : "Označi kot opravljeno"}
                     >
                       <input
                         type="checkbox"
                         checked={opravilo.opravljeno}
+                        disabled={isKlon}
                         onChange={(e) =>
                           toggleOpravilo(
                             opravilo.id,
-                            opravilo.opravljeno,
-                            e.target.checked
+                            e.target.checked,
+                            getKlikDatum()
                           )
                         }
                         className="peer sr-only"
-                        aria-label={opravilo.opravljeno ? "Označi kot neopravljeno" : "Označi kot opravljeno"}
+                        aria-label={isKlon ? "Klonirano opravilo" : opravilo.opravljeno ? "Označi kot neopravljeno" : "Označi kot opravljeno"}
                       />
                       <span className="flex h-6 w-6 items-center justify-center rounded-lg border border-[var(--line)] bg-white/90 text-white shadow-[0_8px_18px_-12px_rgba(29,37,51,0.55)] transition-all duration-200 group-hover:border-[var(--accent)] group-hover:bg-[var(--accent-soft)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--accent-soft)] peer-checked:border-green-500 peer-checked:bg-green-500 peer-checked:shadow-[0_10px_22px_-10px_rgba(34,197,94,0.55)]">
                         <svg
@@ -472,7 +628,7 @@ export default function AplikacijaPageClient() {
                         </p>
                       )}
                       <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--muted)]">
-                        <span>📅 {formatDate(opravilo.od)}</span>
+                        <span>📅 {formatDateFromDate(displayDate)}</span>
                         <span>⏰ {formatTime(opravilo.od)} - {formatTime(opravilo.do)}</span>
                         <span className="inline-block rounded-full bg-[var(--accent-soft)] px-2 py-1 text-[var(--accent)]">
                           {opravilo.kolikokrat === "samo_enkrat" && "Samo enkrat"}
@@ -485,6 +641,8 @@ export default function AplikacijaPageClient() {
                     </div>
                   </div>
                 </div>
+                  );
+                })()
               ))}
             </div>
           )}
