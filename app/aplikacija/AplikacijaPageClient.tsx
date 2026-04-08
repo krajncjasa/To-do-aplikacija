@@ -68,9 +68,28 @@ export default function AplikacijaPageClient() {
   const toggleOpravilo = async (
     id: number,
     novoOpravljeno: boolean,
-    datumKljuka: Date
+    datumKljuka: Date,
+    isKlon: boolean
   ) => {
     try {
+      if (isKlon && !novoOpravljeno) {
+        const deleteResponse = await fetch(`/api/opravila/${id}`, {
+          method: "DELETE",
+        });
+
+        const deleteResult = (await deleteResponse.json().catch(() => null)) as
+          | { success?: boolean; error?: string }
+          | null;
+
+        if (!deleteResponse.ok) {
+          console.error(deleteResult?.error || "Napaka pri brisanju opravila");
+          return;
+        }
+
+        await fetchOpravila();
+        return;
+      }
+
       const response = await fetch(`/api/opravila/${id}`, {
         method: "PATCH",
         headers: {
@@ -107,6 +126,11 @@ export default function AplikacijaPageClient() {
   const monthNames = [
     "Januar", "Februar", "Marec", "April", "Maj", "Junij",
     "Julij", "Avgust", "September", "Oktober", "November", "December",
+  ];
+
+  const monthNamesShort = [
+    "Jan", "Feb", "Mar", "Apr", "Maj", "Jun",
+    "Jul", "Avg", "Sep", "Okt", "Nov", "Dec",
   ];
 
   const dayNames = ["Pon", "Tor", "Sre", "Čet", "Pet", "Sob", "Ned"];
@@ -391,7 +415,7 @@ export default function AplikacijaPageClient() {
                 setPickerYear(currentDate.getFullYear());
                 setShowMonthYearPicker((prev) => !prev);
               }}
-              className="font-display rounded-lg px-2 py-1 text-xl transition-colors hover:bg-[var(--accent-soft)]"
+              className="font-display max-w-[12rem] truncate rounded-lg px-2 py-1 text-lg transition-colors hover:bg-[var(--accent-soft)] sm:max-w-none sm:text-xl"
               title="Izberi mesec in leto"
             >
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
@@ -412,17 +436,37 @@ export default function AplikacijaPageClient() {
             </div>
 
             {showMonthYearPicker && (
-              <div className="absolute left-0 top-12 z-20 w-full rounded-2xl border border-[var(--line)] bg-white p-4 shadow-[0_20px_45px_-34px_rgba(29,37,51,0.45)]">
-                <div className="mb-4 flex items-center justify-between gap-2">
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowMonthYearPicker(false)}
+                  className="fixed inset-0 z-20 bg-slate-950/25 sm:hidden"
+                  aria-label="Zapri izbirnik datuma"
+                />
+                <div className="fixed inset-x-4 top-20 z-30 rounded-2xl border border-[var(--line)] bg-white p-4 shadow-[0_30px_70px_-38px_rgba(29,37,51,0.55)] sm:absolute sm:left-0 sm:right-auto sm:top-12 sm:w-full sm:p-4 sm:shadow-[0_20px_45px_-34px_rgba(29,37,51,0.45)]">
+                <div className="mb-3 flex items-center justify-between gap-2 border-b border-[var(--line)] pb-3 sm:mb-4 sm:pb-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                    Izberi mesec
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowMonthYearPicker(false)}
+                    className="rounded-md border border-[var(--line)] px-2 py-1 text-xs font-semibold hover:bg-[var(--accent-soft)] sm:hidden"
+                  >
+                    Zapri
+                  </button>
+                </div>
+
+                <div className="mb-4 flex items-center justify-between gap-2 sm:gap-3">
                   <button
                     type="button"
                     onClick={() => setPickerYear((prev) => prev - 1)}
-                    className="rounded-lg border border-[var(--line)] px-3 py-1 text-sm hover:bg-[var(--accent-soft)]"
+                    className="rounded-lg border border-[var(--line)] px-2.5 py-1 text-sm hover:bg-[var(--accent-soft)] sm:px-3"
                   >
                     ←
                   </button>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
                       {pickerYear}
                     </span>
                     <button
@@ -437,7 +481,7 @@ export default function AplikacijaPageClient() {
                   <button
                     type="button"
                     onClick={() => setPickerYear((prev) => prev + 1)}
-                    className="rounded-lg border border-[var(--line)] px-3 py-1 text-sm hover:bg-[var(--accent-soft)]"
+                    className="rounded-lg border border-[var(--line)] px-2.5 py-1 text-sm hover:bg-[var(--accent-soft)] sm:px-3"
                   >
                     →
                   </button>
@@ -454,18 +498,20 @@ export default function AplikacijaPageClient() {
                         key={monthName}
                         type="button"
                         onClick={() => goToMonthYear(index, pickerYear)}
-                        className={`rounded-lg border px-2 py-2 text-sm font-semibold transition-colors ${
+                        title={monthName}
+                        className={`h-9 rounded-lg border px-1 text-xs font-semibold leading-none transition-colors ${
                           isActive
                             ? "border-[var(--accent)] bg-[var(--accent)] text-white"
                             : "border-[var(--line)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
                         }`}
                       >
-                        {monthName}
+                        <span className="block truncate">{monthNamesShort[index]}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
+              </>
             )}
           </div>
 
@@ -582,12 +628,12 @@ export default function AplikacijaPageClient() {
                       <input
                         type="checkbox"
                         checked={opravilo.opravljeno}
-                        disabled={isKlon}
                         onChange={(e) =>
                           toggleOpravilo(
                             opravilo.id,
                             e.target.checked,
-                            getKlikDatum()
+                            getKlikDatum(),
+                            isKlon
                           )
                         }
                         className="peer sr-only"

@@ -295,13 +295,6 @@ export async function PATCH(
       );
     }
 
-    if (opravljeno && !clickedDate) {
-      return NextResponse.json(
-        { error: "Neveljaven datum klika" },
-        { status: 400 }
-      );
-    }
-
     // Preveri, da je opravilo lastnika uporabnika
     const { data: opravilo, error: fetchError } = await supabaseAdmin
       .from("opravila")
@@ -326,6 +319,13 @@ export async function PATCH(
     // Ko uporabnik označi opravilo kot opravljeno, se ustvari kopija z opravljeno=true,
     // glavno opravilo pa ostane nespremenjeno (opravljeno ostane null).
     if (opravljeno) {
+      if (!clickedDate) {
+        return NextResponse.json(
+          { error: "Neveljaven datum klika" },
+          { status: 400 }
+        );
+      }
+
       const klonOd = cloneDateTimeToClickedDate(opravilo.od, clickedDate);
       const klonDo = cloneDateTimeToClickedDate(opravilo.do, clickedDate);
 
