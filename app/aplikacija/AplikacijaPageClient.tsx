@@ -331,6 +331,14 @@ export default function AplikacijaPageClient() {
     );
   };
 
+  const getVisibleOpravilaForDate = (checkDate: Date) =>
+    opravila.filter((opravilo) => isVisibleOnDate(opravilo, checkDate));
+
+  const areAllEventsCompletedForDate = (checkDate: Date) => {
+    const opravilaForDate = getVisibleOpravilaForDate(checkDate);
+    return opravilaForDate.length > 0 && opravilaForDate.every((opravilo) => opravilo.opravljeno);
+  };
+
   const daysArray = [];
   const firstDay = firstDayOfMonth(currentDate);
   const days = daysInMonth(currentDate);
@@ -532,7 +540,10 @@ export default function AplikacijaPageClient() {
               }
 
               const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-              const hasEvents = opravila.some((op) => doesOpravljoHappenOnDate(op, date));
+              const opravilaForDate = getVisibleOpravilaForDate(date);
+              const hasEvents = opravilaForDate.length > 0;
+              const allEventsCompleted = areAllEventsCompletedForDate(date);
+              const isSelectedDay = filterMode === "specifičen_dan" && isSelected(date);
 
               return (
                 <button
@@ -542,16 +553,20 @@ export default function AplikacijaPageClient() {
                     setFilterMode("specifičen_dan");
                   }}
                   className={`relative aspect-square rounded-xl py-2 text-sm font-semibold transition-all ${
-                    filterMode === "specifičen_dan" && isSelected(date)
-                      ? "bg-[var(--accent)] text-white"
-                      : isToday(date)
-                        ? "border-2 border-[var(--accent)] bg-[var(--accent-soft)]"
-                        : "border border-[var(--line)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]"
+                    allEventsCompleted
+                      ? isSelectedDay
+                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                        : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-100"
+                      : isSelectedDay
+                        ? "bg-[var(--accent)] text-white"
+                        : isToday(date)
+                          ? "border-2 border-[var(--accent)] bg-[var(--accent-soft)]"
+                          : "border border-[var(--line)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]"
                   }`}
                 >
                   {day}
                   {hasEvents && (
-                    <div className={`absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full ${filterMode === "specifičen_dan" && isSelected(date) ? "bg-white" : "bg-[var(--accent)]"}`} />
+                    <div className={`absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full ${allEventsCompleted ? "bg-emerald-600" : isSelectedDay ? "bg-white" : "bg-[var(--accent)]"}`} />
                   )}
                 </button>
               );
