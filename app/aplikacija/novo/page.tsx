@@ -36,6 +36,28 @@ export default function NovoOpravilo() {
     return formData.odKdaj;
   };
 
+  const buildDoKdajDateTime = (odKdaj: string, doKdaj: string, ponavljanje: string) => {
+    if (!odKdaj || !doKdaj) {
+      return "";
+    }
+
+    return ponavljanje === "samo_enkrat"
+      ? doKdaj
+      : `${odKdaj.split("T")[0]}T${doKdaj}`;
+  };
+
+  const isValidDateOrder = (odKdaj: string, doKdaj: string, ponavljanje: string) => {
+    const endDateTime = buildDoKdajDateTime(odKdaj, doKdaj, ponavljanje);
+    const odKdajTime = new Date(odKdaj).getTime();
+    const doKdajTime = new Date(endDateTime).getTime();
+
+    if (Number.isNaN(odKdajTime) || Number.isNaN(doKdajTime)) {
+      return false;
+    }
+
+    return doKdajTime > odKdajTime;
+  };
+
   const toDateTimeLocalValue = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -72,13 +94,13 @@ export default function NovoOpravilo() {
       doKdajDateTime = toDateTimeLocalValue(defaultDo);
     }
 
-    const odKdajTime = new Date(odKdajDateTime).getTime();
-    const doKdajTime = new Date(doKdajDateTime).getTime();
-
-    if (Number.isNaN(odKdajTime) || Number.isNaN(doKdajTime)) {
+    if (!isValidDateOrder(odKdajDateTime, doKdajDateTime, formData.ponavljanje)) {
       setSubmitError("Neveljaven datum ali čas");
       return;
     }
+
+    const odKdajTime = new Date(odKdajDateTime).getTime();
+    const doKdajTime = new Date(doKdajDateTime).getTime();
 
     if (odKdajTime < nowTime) {
       setSubmitError("Od kdaj ne sme biti v preteklosti");
@@ -203,15 +225,8 @@ export default function NovoOpravilo() {
                     const newOdKdaj = e.target.value;
                     setFormData((prev) => {
                       const updated = { ...prev, odKdaj: newOdKdaj };
-                      if (updated.doKdaj) {
-                        const updatedDo =
-                          updated.ponavljanje === "samo_enkrat"
-                            ? updated.doKdaj
-                            : `${newOdKdaj.split("T")[0]}T${updated.doKdaj}`;
-
-                        if (new Date(newOdKdaj).getTime() > new Date(updatedDo).getTime()) {
-                          updated.doKdaj = "";
-                        }
+                      if (updated.doKdaj && !isValidDateOrder(newOdKdaj, updated.doKdaj, updated.ponavljanje)) {
+                        updated.doKdaj = "";
                       }
                       return updated;
                     });
@@ -233,12 +248,24 @@ export default function NovoOpravilo() {
                   }
                   value={formData.doKdaj}
                   disabled={isRepeating && !formData.odKdaj}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const newDoKdaj = e.target.value;
+
+                    if (
+                      newDoKdaj &&
+                      formData.odKdaj &&
+                      !isValidDateOrder(formData.odKdaj, newDoKdaj, formData.ponavljanje)
+                    ) {
+                      setSubmitError("Do kdaj mora biti po Od kdaj");
+                      return;
+                    }
+
+                    setSubmitError(null);
                     setFormData((prev) => ({
                       ...prev,
-                      doKdaj: e.target.value,
-                    }))
-                  }
+                      doKdaj: newDoKdaj,
+                    }));
+                  }}
                   className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                 />
               </div>

@@ -91,6 +91,17 @@ export default function UrediOpraviloPage() {
     return formData.odKdaj;
   };
 
+  const isValidDateOrder = (odKdaj: string, doKdaj: string) => {
+    const odKdajTime = new Date(odKdaj).getTime();
+    const doKdajTime = new Date(doKdaj).getTime();
+
+    if (Number.isNaN(odKdajTime) || Number.isNaN(doKdajTime)) {
+      return false;
+    }
+
+    return doKdajTime > odKdajTime;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitError(null);
@@ -105,16 +116,8 @@ export default function UrediOpraviloPage() {
       return;
     }
 
-    const odKdajTime = new Date(formData.odKdaj).getTime();
-    const doKdajTime = new Date(formData.doKdaj).getTime();
-
-    if (Number.isNaN(odKdajTime) || Number.isNaN(doKdajTime)) {
+    if (!isValidDateOrder(formData.odKdaj, formData.doKdaj)) {
       setSubmitError("Neveljaven datum");
-      return;
-    }
-
-    if (doKdajTime <= odKdajTime) {
-      setSubmitError("Do kdaj mora biti po Od kdaj");
       return;
     }
 
@@ -263,7 +266,7 @@ export default function UrediOpraviloPage() {
                         const updated = { ...prev, odKdaj: newOdKdaj };
                         if (
                           updated.doKdaj &&
-                          new Date(newOdKdaj).getTime() > new Date(updated.doKdaj).getTime()
+                          !isValidDateOrder(newOdKdaj, updated.doKdaj)
                         ) {
                           updated.doKdaj = "";
                         }
@@ -282,12 +285,20 @@ export default function UrediOpraviloPage() {
                     type="datetime-local"
                     min={getMinDateTimeForDo()}
                     value={formData.doKdaj}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const newDoKdaj = e.target.value;
+
+                      if (newDoKdaj && formData.odKdaj && !isValidDateOrder(formData.odKdaj, newDoKdaj)) {
+                        setSubmitError("Do kdaj mora biti po Od kdaj");
+                        return;
+                      }
+
+                      setSubmitError(null);
                       setFormData((prev) => ({
                         ...prev,
-                        doKdaj: e.target.value,
-                      }))
-                    }
+                        doKdaj: newDoKdaj,
+                      }));
+                    }}
                     className="h-11 rounded-xl border border-[var(--line)] bg-white/70 px-4 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                   />
                 </div>
