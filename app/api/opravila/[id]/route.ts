@@ -14,6 +14,38 @@ const ALLOWED_PONAVLJANJE = [
   "vsako_leto",
 ] as const;
 
+const parseDateTimeLocalValue = (value: string) => {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hours = Number(match[4]);
+  const minutes = Number(match[5]);
+  const seconds = Number(match[6] || "0");
+  const parsed = new Date(year, month - 1, day, hours, minutes, seconds, 0);
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day ||
+    parsed.getHours() !== hours ||
+    parsed.getMinutes() !== minutes ||
+    parsed.getSeconds() !== seconds
+  ) {
+    return null;
+  }
+
+  return parsed;
+};
+
 const resolveTaskId = async (paramsPromise: RouteContext["params"]) => {
   const { id } = await paramsPromise;
 
@@ -184,10 +216,10 @@ export async function PUT(
       );
     }
 
-    const odDate = new Date(odKdaj);
-    const doDate = new Date(doKdaj);
+    const odDate = parseDateTimeLocalValue(odKdaj);
+    const doDate = parseDateTimeLocalValue(doKdaj);
 
-    if (Number.isNaN(odDate.getTime()) || Number.isNaN(doDate.getTime())) {
+    if (!odDate || !doDate) {
       return NextResponse.json(
         { error: "Neveljaven datum" },
         { status: 400 }

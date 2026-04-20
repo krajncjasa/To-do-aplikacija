@@ -36,22 +36,60 @@ export default function NovoOpravilo() {
     return formData.odKdaj;
   };
 
-  const buildDoKdajDateTime = (odKdaj: string, doKdaj: string, ponavljanje: string) => {
+  const parseDateTimeLocalValue = (value: string) => {
+    const match = value.match(
+      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const hours = Number(match[4]);
+    const minutes = Number(match[5]);
+    const seconds = Number(match[6] || "0");
+    const parsed = new Date(year, month - 1, day, hours, minutes, seconds, 0);
+
+    if (
+      Number.isNaN(parsed.getTime()) ||
+      parsed.getFullYear() !== year ||
+      parsed.getMonth() !== month - 1 ||
+      parsed.getDate() !== day ||
+      parsed.getHours() !== hours ||
+      parsed.getMinutes() !== minutes ||
+      parsed.getSeconds() !== seconds
+    ) {
+      return null;
+    }
+
+    return parsed;
+  };
+
+  const normalizeDoKdajDateTime = (odKdaj: string, doKdaj: string, ponavljanje: string) => {
     if (!odKdaj || !doKdaj) {
       return "";
     }
 
-    return ponavljanje === "samo_enkrat"
-      ? doKdaj
-      : `${odKdaj.split("T")[0]}T${doKdaj}`;
+    if (ponavljanje === "samo_enkrat") {
+      return doKdaj;
+    }
+
+    if (/^\d{2}:\d{2}(:\d{2})?$/.test(doKdaj)) {
+      return `${odKdaj.split("T")[0]}T${doKdaj}`;
+    }
+
+    return doKdaj;
   };
 
   const isValidDateOrder = (odKdaj: string, doKdaj: string, ponavljanje: string) => {
-    const endDateTime = buildDoKdajDateTime(odKdaj, doKdaj, ponavljanje);
-    const odKdajTime = new Date(odKdaj).getTime();
-    const doKdajTime = new Date(endDateTime).getTime();
+    const endDateTime = normalizeDoKdajDateTime(odKdaj, doKdaj, ponavljanje);
+    const odKdajTime = parseDateTimeLocalValue(odKdaj)?.getTime();
+    const doKdajTime = parseDateTimeLocalValue(endDateTime)?.getTime();
 
-    if (Number.isNaN(odKdajTime) || Number.isNaN(doKdajTime)) {
+    if (odKdajTime === undefined || doKdajTime === undefined) {
       return false;
     }
 
@@ -85,9 +123,7 @@ export default function NovoOpravilo() {
 
     let doKdajDateTime = "";
     if (formData.doKdaj) {
-      doKdajDateTime = isRepeating
-        ? `${odKdajDateTime.split("T")[0]}T${formData.doKdaj}`
-        : formData.doKdaj;
+      doKdajDateTime = normalizeDoKdajDateTime(odKdajDateTime, formData.doKdaj, formData.ponavljanje);
     } else {
       const defaultDo = new Date(odKdajDateTime);
       defaultDo.setHours(defaultDo.getHours() + 1);
@@ -99,8 +135,13 @@ export default function NovoOpravilo() {
       return;
     }
 
-    const odKdajTime = new Date(odKdajDateTime).getTime();
-    const doKdajTime = new Date(doKdajDateTime).getTime();
+    const odKdajTime = parseDateTimeLocalValue(odKdajDateTime)?.getTime();
+    const doKdajTime = parseDateTimeLocalValue(doKdajDateTime)?.getTime();
+
+    if (odKdajTime === undefined || doKdajTime === undefined) {
+      setSubmitError("Neveljaven datum ali čas");
+      return;
+    }
 
     if (odKdajTime < nowTime) {
       setSubmitError("Od kdaj ne sme biti v preteklosti");

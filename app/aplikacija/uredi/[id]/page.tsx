@@ -32,6 +32,38 @@ const toDateTimeLocalValue = (value: string) => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
+const parseDateTimeLocalValue = (value: string) => {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hours = Number(match[4]);
+  const minutes = Number(match[5]);
+  const seconds = Number(match[6] || "0");
+  const parsed = new Date(year, month - 1, day, hours, minutes, seconds, 0);
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day ||
+    parsed.getHours() !== hours ||
+    parsed.getMinutes() !== minutes ||
+    parsed.getSeconds() !== seconds
+  ) {
+    return null;
+  }
+
+  return parsed;
+};
+
 export default function UrediOpraviloPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -92,10 +124,10 @@ export default function UrediOpraviloPage() {
   };
 
   const isValidDateOrder = (odKdaj: string, doKdaj: string) => {
-    const odKdajTime = new Date(odKdaj).getTime();
-    const doKdajTime = new Date(doKdaj).getTime();
+    const odKdajTime = parseDateTimeLocalValue(odKdaj)?.getTime();
+    const doKdajTime = parseDateTimeLocalValue(doKdaj)?.getTime();
 
-    if (Number.isNaN(odKdajTime) || Number.isNaN(doKdajTime)) {
+    if (odKdajTime === undefined || doKdajTime === undefined) {
       return false;
     }
 
