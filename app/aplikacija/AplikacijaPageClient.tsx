@@ -187,8 +187,10 @@ export default function AplikacijaPageClient() {
   const doesOpravljoHappenOnDate = (opravilo: Opravilo, checkDate: Date): boolean => {
     const kolikokrat = normalizeKolikokrat(opravilo.kolikokrat);
     const opDate = new Date(opravilo.od);
+    const opEndDate = new Date(opravilo.do);
 
     const opDayMs = toUtcDayMs(opDate);
+    const opEndDayMs = Number.isNaN(opEndDate.getTime()) ? opDayMs : toUtcDayMs(opEndDate);
     const checkDayMs = toUtcDayMs(checkDate);
 
     if (checkDayMs < opDayMs) {
@@ -197,7 +199,7 @@ export default function AplikacijaPageClient() {
 
     switch (kolikokrat) {
       case "samo_enkrat":
-        return checkDayMs === opDayMs;
+        return checkDayMs <= opEndDayMs;
 
       case "vsak_dan":
         return checkDayMs >= opDayMs;
@@ -465,7 +467,7 @@ export default function AplikacijaPageClient() {
                   </button>
                 </div>
 
-                <div className="mb-4 flex items-center justify-between gap-2 sm:gap-3">
+                <div className="mb-4 grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-3">
                   <button
                     type="button"
                     onClick={() => setPickerYear((prev) => prev - 1)}
@@ -473,14 +475,14 @@ export default function AplikacijaPageClient() {
                   >
                     ←
                   </button>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-sm font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                  <div className="flex min-w-0 flex-col items-center justify-center gap-1.5">
+                    <span className="inline-flex h-9 w-full max-w-[7.5rem] items-center justify-center rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-semibold tabular-nums text-[var(--foreground)] shadow-[0_6px_14px_-10px_rgba(29,37,51,0.45)]">
                       {pickerYear}
                     </span>
                     <button
                       type="button"
                       onClick={goToCurrentMonth}
-                      className="rounded-lg border border-[var(--line)] px-2 py-1 text-xs font-semibold hover:bg-[var(--accent-soft)]"
+                      className="h-9 w-full max-w-[7.5rem] rounded-lg border border-[var(--line)] px-2.5 text-xs font-semibold hover:bg-[var(--accent-soft)]"
                       title="Pojdi na trenutni mesec"
                     >
                       Danes

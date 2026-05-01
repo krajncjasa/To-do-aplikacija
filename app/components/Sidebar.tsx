@@ -16,6 +16,11 @@ const navItems = [
     icon: "➕",
   },
   {
+    label: "Statistika",
+    href: "/aplikacija/statistika",
+    icon: "📊",
+  },
+  {
     label: "Moj profil",
     href: "/aplikacija/profil",
     icon: "👤",
